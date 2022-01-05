@@ -137,15 +137,21 @@ void field::add_card(uint8 playerid, card* pcard, uint8 location, uint8 sequence
 		break;
 	}
 	case LOCATION_DECK: {
-		if (sequence == 0) {		//deck top
+		if (sequence == SEQ_DECKTOP) {
 			player[playerid].list_main.push_back(pcard);
 			pcard->current.sequence = (uint8)player[playerid].list_main.size() - 1;
-		} else if (sequence == 1) {		//deck bottom
+		} else if (sequence == SEQ_DECKBOTTOM) {
 			player[playerid].list_main.insert(player[playerid].list_main.begin(), pcard);
 			reset_sequence(playerid, LOCATION_DECK);
-		} else {		//deck top & shuffle
-			player[playerid].list_main.push_back(pcard);
-			pcard->current.sequence = (uint8)player[playerid].list_main.size() - 1;
+		} else { // SEQ_DECKSHUFFLE
+			if(core.duel_options & DUEL_RETURN_DECK_TOP) {
+				player[playerid].list_main.push_back(pcard);
+				pcard->current.sequence = (uint8)player[playerid].list_main.size() - 1;
+			}
+			else {
+				player[playerid].list_main.insert(player[playerid].list_main.begin(), pcard);
+				reset_sequence(playerid, LOCATION_DECK);
+			}
 			if(!core.shuffle_check_disabled)
 				core.shuffle_deck_check[playerid] = TRUE;
 		}
@@ -215,6 +221,7 @@ void field::remove_card(card* pcard) {
 			core.shuffle_deck_check[playerid] = TRUE;
 		break;
 	case LOCATION_HAND:
+		pcard->set_status(STATUS_TO_HAND_WITHOUT_CONFIRM, FALSE);
 		player[playerid].list_hand.erase(player[playerid].list_hand.begin() + pcard->current.sequence);
 		reset_sequence(playerid, LOCATION_HAND);
 		break;
@@ -264,12 +271,15 @@ void field::move_card(uint8 playerid, card* pcard, uint8 location, uint8 sequenc
 					pduel->write_buffer32(pcard->data.code);
 					pduel->write_buffer32(pcard->get_info_location());
 					player[preplayer].list_main.erase(player[preplayer].list_main.begin() + pcard->current.sequence);
-					if (sequence == 0) {		//deck top
+					if (sequence == SEQ_DECKTOP) {
 						player[playerid].list_main.push_back(pcard);
-					} else if (sequence == 1) {
+					} else if (sequence == SEQ_DECKBOTTOM) {
 						player[playerid].list_main.insert(player[playerid].list_main.begin(), pcard);
-					} else {
-						player[playerid].list_main.push_back(pcard);
+					} else { // SEQ_DECKSHUFFLE
+						if(core.duel_options & DUEL_RETURN_DECK_TOP)
+							player[playerid].list_main.push_back(pcard);
+						else
+							player[playerid].list_main.insert(player[playerid].list_main.begin(), pcard);
 						if(!core.shuffle_check_disabled)
 							core.shuffle_deck_check[playerid] = TRUE;
 					}
@@ -2262,7 +2272,7 @@ int32 field::check_spsummon_counter(uint8 playerid, uint8 ct) {
 	}
 	return TRUE;
 }
-int32 field::check_lp_cost(uint8 playerid, uint32 lp) {
+int32 field::check_lp_cost(uint8 playerid, uint32 lp, uint32 must_pay) {
 	effect_set eset;
 	int32 val = lp;
 	filter_player_effect(playerid, EFFECT_LPCOST_CHANGE, &eset);
@@ -2272,17 +2282,22 @@ int32 field::check_lp_cost(uint8 playerid, uint32 lp) {
 		pduel->lua->add_param(val, PARAM_TYPE_INT);
 		val = eset[i]->get_value(3);
 	}
-	if(val <= 0)
+	if(val <= 0) {
+		if(must_pay)
+			return FALSE;
 		return TRUE;
-	tevent e;
-	e.event_cards = 0;
-	e.event_player = playerid;
-	e.event_value = lp;
-	e.reason = 0;
-	e.reason_effect = core.reason_effect;
-	e.reason_player = playerid;
-	if(effect_replace_check(EFFECT_LPCOST_REPLACE, e))
-		return TRUE;
+	}
+	if(!must_pay) {
+		tevent e;
+		e.event_cards = 0;
+		e.event_player = playerid;
+		e.event_value = lp;
+		e.reason = 0;
+		e.reason_effect = core.reason_effect;
+		e.reason_player = playerid;
+		if(effect_replace_check(EFFECT_LPCOST_REPLACE, e))
+			return TRUE;
+	}
 	//cost[playerid].amount += val;
 	if(val <= player[playerid].lp)
 		return TRUE;

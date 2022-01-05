@@ -1170,13 +1170,13 @@ int32 scriptlib::duel_is_environment(lua_State *L) {
 	int32 ret = 0, fc = 0;
 	if(loc & (LOCATION_FZONE + LOCATION_SZONE)) {
 		card* pcard = pduel->game_field->player[0].list_szone[5];
-		if(pcard && pcard->is_position(POS_FACEUP) && pcard->get_status(STATUS_EFFECT_ENABLED)) {
+		if(pcard && pcard->is_position(POS_FACEUP)) {
 			fc = 1;
 			if(code == pcard->get_code() && (playerid == 0 || playerid == PLAYER_ALL))
 				ret = 1;
 		}
 		pcard = pduel->game_field->player[1].list_szone[5];
-		if(pcard && pcard->is_position(POS_FACEUP) && pcard->get_status(STATUS_EFFECT_ENABLED)) {
+		if(pcard && pcard->is_position(POS_FACEUP)) {
 			fc = 1;
 			if(code == pcard->get_code() && (playerid == 1 || playerid == PLAYER_ALL))
 				ret = 1;
@@ -1185,13 +1185,13 @@ int32 scriptlib::duel_is_environment(lua_State *L) {
 	if(!ret && (loc & LOCATION_SZONE)) {
 		if(playerid == 0 || playerid == PLAYER_ALL) {
 			for(auto& pcard : pduel->game_field->player[0].list_szone) {
-				if(pcard && pcard->is_position(POS_FACEUP) && pcard->get_status(STATUS_EFFECT_ENABLED) && code == pcard->get_code())
+				if(pcard && pcard->is_position(POS_FACEUP) && code == pcard->get_code())
 					ret = 1;
 			}
 		}
 		if(playerid == 1 || playerid == PLAYER_ALL) {
 			for(auto& pcard : pduel->game_field->player[1].list_szone) {
-				if(pcard && pcard->is_position(POS_FACEUP) && pcard->get_status(STATUS_EFFECT_ENABLED) && code == pcard->get_code())
+				if(pcard && pcard->is_position(POS_FACEUP) && code == pcard->get_code())
 					ret = 1;
 			}
 		}
@@ -1199,13 +1199,13 @@ int32 scriptlib::duel_is_environment(lua_State *L) {
 	if(!ret && (loc & LOCATION_MZONE)) {
 		if(playerid == 0 || playerid == PLAYER_ALL) {
 			for(auto& pcard : pduel->game_field->player[0].list_mzone) {
-				if(pcard && pcard->is_position(POS_FACEUP) && pcard->get_status(STATUS_EFFECT_ENABLED) && code == pcard->get_code())
+				if(pcard && pcard->is_position(POS_FACEUP) && code == pcard->get_code())
 					ret = 1;
 			}
 		}
 		if(playerid == 1 || playerid == PLAYER_ALL) {
 			for(auto& pcard : pduel->game_field->player[1].list_mzone) {
-				if(pcard && pcard->is_position(POS_FACEUP) && pcard->get_status(STATUS_EFFECT_ENABLED) && code == pcard->get_code())
+				if(pcard && pcard->is_position(POS_FACEUP) && code == pcard->get_code())
 					ret = 1;
 			}
 		}
@@ -1433,7 +1433,10 @@ int32 scriptlib::duel_check_lp_cost(lua_State *L) {
 		return 0;
 	uint32 cost = (uint32)lua_tointeger(L, 2);
 	duel* pduel = interpreter::get_duel_info(L);
-	lua_pushboolean(L, pduel->game_field->check_lp_cost(playerid, cost));
+	uint32 must_pay = FALSE;
+	if(lua_gettop(L) > 2)
+		must_pay = lua_toboolean(L, 3);
+	lua_pushboolean(L, pduel->game_field->check_lp_cost(playerid, cost, must_pay));
 	return 1;
 }
 int32 scriptlib::duel_pay_lp_cost(lua_State *L) {
@@ -1444,7 +1447,10 @@ int32 scriptlib::duel_pay_lp_cost(lua_State *L) {
 		return 0;
 	uint32 cost = (uint32)lua_tointeger(L, 2);
 	duel* pduel = interpreter::get_duel_info(L);
-	pduel->game_field->add_process(PROCESSOR_PAY_LPCOST, 0, 0, 0, playerid, cost);
+	uint32 must_pay = FALSE;
+	if(lua_gettop(L) > 2)
+		must_pay = lua_toboolean(L, 3);
+	pduel->game_field->add_process(PROCESSOR_PAY_LPCOST, 0, 0, 0, playerid, cost, must_pay);
 	return lua_yield(L, 0);
 }
 int32 scriptlib::duel_discard_deck(lua_State *L) {
@@ -3404,7 +3410,12 @@ int32 scriptlib::duel_overlay(lua_State *L) {
 		target->xyz_overlay(&cset);
 	} else
 		target->xyz_overlay(&pgroup->container);
-	target->pduel->game_field->adjust_all();
+	uint32 adjust = TRUE;
+	if(lua_gettop(L) > 2) {
+		adjust = lua_toboolean(L, 3);
+	}
+	if(adjust)
+		target->pduel->game_field->adjust_all();
 	return lua_yield(L, 0);
 }
 int32 scriptlib::duel_get_overlay_group(lua_State *L) {
